@@ -9,4 +9,10 @@
         <id>missingIncludeSystem</id>
     </suppress>
 
+    <!-- Suppress using std::transform algorithm instead of a raw loop -->
+    <suppress>
+        <id>useStlAlgorithm</id>
+        <fileName>*/src/aether_router.cc</fileName>
+    </suppress>
+
 </suppressions>

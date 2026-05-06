@@ -1,0 +1,13 @@
+[aether]
+log_level = 2
+
+[tcp]
+ports = [8080, 8081, 9000]
+
+[[serial]]
+device = "/dev/ttyUSB0"
+baudrate = 9600
+
+[[serial]]
+device = "/dev/ttyUSB1"
+baudrate = 115200
