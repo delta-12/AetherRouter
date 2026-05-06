@@ -1,0 +1,36 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 30,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "Debug",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "AETHER_LOG_ENABLED": "ON"
+            }
+        },
+        {
+            "name": "Release",
+            "inherits": "Debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "AETHER_LOG_LEVEL": "A_LOG_LEVEL_INFO"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "Debug",
+            "configurePreset": "Debug"
+        },
+        {
+            "name": "Release",
+            "configurePreset": "Release"
+        }
+    ]
+}
