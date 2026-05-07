@@ -2,8 +2,6 @@
 #define AETHER_ROUTER_TCP_SERVER_H
 
 #include <cstdint>
-#include <memory>
-#include <vector>
 
 #include "asio.hpp"
 
@@ -29,6 +27,6 @@ class Server
         tcp::acceptor acceptor_;
 };
 
-} // namespace aether_router
+} // namespace aether_router::tcp
 
 #endif // AETHER_ROUTER_TCP_SERVER_H

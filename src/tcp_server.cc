@@ -5,27 +5,16 @@
 #include <memory>
 #include <vector>
 
+#include "aether.h"
 #include "asio.hpp"
 
-#include "aether.h"
+#include "session.h"
 
 namespace aether_router::tcp
 {
 
 using asio::ip::tcp;
-
-using Session = struct Session
-{
-    explicit Session(tcp::socket socket);
-    Session(const Session &session)            = delete;
-    Session(Session &&session)                 = delete;
-    Session &operator=(const Session &session) = delete;
-    Session &operator=(Session &&session)      = delete;
-    tcp::socket socket_;
-    std::uint8_t send_buffer_[AETHER_TRANSPORT_MTU]    = {0U};
-    std::uint8_t receive_buffer_[AETHER_TRANSPORT_MTU] = {0U};
-    std::uint8_t message_buffer_[AETHER_TRANSPORT_MTU] = {0U};
-};
+using Session = session::Session<tcp::socket>;
 
 const char *                          kLogTag = "TCP_SERVER";
 std::vector<std::unique_ptr<Session>> sessions;
@@ -95,10 +84,6 @@ void Server::AcceptSession(tcp::socket socket)
     }
 }
 
-Session::Session(tcp::socket socket) : socket_(std::move(socket))
-{
-}
-
 static a_Err_t SessionStop(void *arg)
 {
     const Session *const removal = static_cast<Session *>(arg);
@@ -150,4 +135,4 @@ static std::size_t SessionReceive(std::uint8_t *const data, const std::size_t si
     return received;
 }
 
-} // namespace aether_router
+} // namespace aether_router::tcp
