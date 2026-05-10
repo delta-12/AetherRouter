@@ -8,6 +8,7 @@
 #include "aether.h"
 #include "toml++/toml.hpp"
 
+#include "serial.h"
 #include "tcp_server.h"
 #include "version.h"
 
@@ -56,11 +57,27 @@ int main(const int argc, const char *const argv[])
         tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(static_cast<std::uint16_t>(port.as_integer()->get())));
     }
 
+    std::vector<std::unique_ptr<aether_router::serial::Port>> serial_ports;
+    for (auto &&port : *config["serial"].as_array())
+    {
+        const auto table = port.as_table();
+
+        serial_ports.emplace_back(
+            std::make_unique<aether_router::serial::Port>(
+                table->get_as<std::string>("device")->get(),
+                static_cast<std::uint32_t>(table->get_as<int64_t>("baudrate")->get())));
+    }
+
     while (AetherRouter_Running)
     {
         for (std::unique_ptr<aether_router::tcp::Server> &tcp_server : tcp_servers)
         {
             tcp_server->Run();
+        }
+
+        for (std::unique_ptr<aether_router::serial::Port> &serial_port : serial_ports)
+        {
+            serial_port->Run();
         }
 
         a_Task();

@@ -50,6 +50,7 @@ set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(SRCS
     ${SRC_DIR}/aether_router.cc
+    ${SRC_DIR}/serial.cc
     ${SRC_DIR}/tcp_server.cc
 )
 

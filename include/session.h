@@ -9,6 +9,7 @@ namespace aether_router::session
 template<typename T>
 struct Session
 {
+    Session(void);
     explicit Session(T socket);
     Session(const Session &session)            = delete;
     Session(Session &&session)                 = delete;
@@ -19,6 +20,11 @@ struct Session
     std::uint8_t receive_buffer_[AETHER_TRANSPORT_MTU] = {0U};
     std::uint8_t message_buffer_[AETHER_TRANSPORT_MTU] = {0U};
 };
+
+template<typename T>
+Session<T>::Session(void)
+{
+}
 
 template<typename T>
 Session<T>::Session(T socket) : socket_(std::move(socket))
