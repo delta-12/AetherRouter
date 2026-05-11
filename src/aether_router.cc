@@ -1,8 +1,10 @@
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "aether.h"
@@ -90,6 +92,8 @@ int main(const int argc, const char *const argv[])
         }
 
         a_Task();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     a_Deinitialize();
