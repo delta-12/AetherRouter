@@ -52,20 +52,28 @@ int main(const int argc, const char *const argv[])
     }
 
     std::vector<std::unique_ptr<aether_router::tcp::Server>> tcp_servers;
-    for (auto &&port : *config["tcp"]["ports"].as_array())
+    const auto *const                                        tcp_ports = config["tcp"]["ports"].as_array();
+    if (nullptr != tcp_ports)
     {
-        tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(static_cast<std::uint16_t>(port.as_integer()->get())));
+        for (auto &&tcp_port : *tcp_ports)
+        {
+            tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(static_cast<std::uint16_t>(tcp_port.as_integer()->get())));
+        }
     }
 
     std::vector<std::unique_ptr<aether_router::serial::Port>> serial_ports;
-    for (auto &&port : *config["serial"].as_array())
+    const auto *const                                         serial_port_configs = config["serial"].as_array();
+    if (nullptr != serial_port_configs)
     {
-        const auto table = port.as_table();
+        for (auto &&serial_port_config : *serial_port_configs)
+        {
+            const auto table = serial_port_config.as_table();
 
-        serial_ports.emplace_back(
-            std::make_unique<aether_router::serial::Port>(
-                table->get_as<std::string>("device")->get(),
-                static_cast<std::uint32_t>(table->get_as<int64_t>("baudrate")->get())));
+            serial_ports.emplace_back(
+                std::make_unique<aether_router::serial::Port>(
+                    table->get_as<std::string>("device")->get(),
+                    static_cast<std::uint32_t>(table->get_as<int64_t>("baudrate")->get())));
+        }
     }
 
     while (AetherRouter_Running)
