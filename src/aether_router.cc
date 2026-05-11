@@ -19,6 +19,7 @@ void AetherRouter_SignalHandler(const int signal);
 int main(const int argc, const char *const argv[])
 {
     std::signal(SIGINT, AetherRouter_SignalHandler);
+    std::signal(SIGTERM, AetherRouter_SignalHandler);
 
     std::cout << "Aether Router Info:\n"
               << "    Branch: " << AETHER_ROUTER_GIT_BRANCH << "\n"
@@ -97,9 +98,14 @@ int main(const int argc, const char *const argv[])
 
 void AetherRouter_SignalHandler(const int signal)
 {
-    if (SIGINT == signal)
+    switch (signal)
     {
+    case SIGINT:
+    case SIGTERM:
         std::cout << "\nShutting down...\n";
         AetherRouter_Running = false;
+        break;
+    default:
+        break;
     }
 }
