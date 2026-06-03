@@ -60,20 +60,21 @@ void Server::AcceptSession(tcp::socket socket)
 
     a_Socket_Functions_t socket_functions = {.start = nullptr, .stop = SessionStop, .send = SessionSend, .receive = SessionReceive, .arg = session.get()};
     a_Socket_t           aether_socket;
+    a_Session_t          aether_session;
 
-    a_Err_t error = a_Socket_Initialize(&aether_socket,
-                                        A_SOCKET_TYPE_TCP,
-                                        socket_functions,
-                                        session->send_buffer_,
-                                        sizeof(session->send_buffer_),
-                                        session->receive_buffer_,
-                                        sizeof(session->receive_buffer_));
+    a_Err_t error = a_InitializeSocket(&aether_socket,
+                                       A_SOCKET_TYPE_TCP,
+                                       socket_functions,
+                                       session->send_buffer_,
+                                       sizeof(session->send_buffer_),
+                                       session->receive_buffer_,
+                                       sizeof(session->receive_buffer_));
 
     A_LOG_VERBOSE(kLogTag, "Socket initialization error: %s", a_Err_ToString(error));
 
     if (A_ERR_NONE == error)
     {
-        error = a_AddSocket(&aether_socket, session->message_buffer_, sizeof(session->message_buffer_), false);
+        error = a_AddSession(&aether_session, &aether_socket, session->message_buffer_, sizeof(session->message_buffer_), false);
 
         A_LOG_VERBOSE(kLogTag, "Socket add error: %s", a_Err_ToString(error));
     }

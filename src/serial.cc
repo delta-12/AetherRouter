@@ -27,22 +27,23 @@ Port::Port(const std::string &device, const uint32_t baud_rate) : serial_port_(i
 
     A_LOG_DEBUG(kLogTag, "Listening on device %s with baudrate %u", device.c_str(), baud_rate);
 
-    a_Socket_Functions_t socket_functions = {.start = nullptr, .stop = nullptr, .send = SessionSend, .receive = SessionReceive, .arg = this};
-    a_Socket_t           aether_socket;
+    a_SocketFunctions_t aether_socket_functions = {.start = nullptr, .stop = nullptr, .send = SessionSend, .receive = SessionReceive, .arg = this};
+    a_Socket_t          aether_socket;
+    a_Session_t         aether_session;
 
-    a_Err_t error = a_Socket_Initialize(&aether_socket,
-                                        A_SOCKET_TYPE_SERIAL,
-                                        socket_functions,
-                                        session_.send_buffer_,
-                                        sizeof(session_.send_buffer_),
-                                        session_.receive_buffer_,
-                                        sizeof(session_.receive_buffer_));
+    a_Err_t error = a_InitializeSocket(&aether_socket,
+                                       A_SOCKET_TYPE_SERIAL,
+                                       aether_socket_functions,
+                                       session_.send_buffer_,
+                                       sizeof(session_.send_buffer_),
+                                       session_.receive_buffer_,
+                                       sizeof(session_.receive_buffer_));
 
     A_LOG_VERBOSE(kLogTag, "Socket initialization error: %s", a_Err_ToString(error));
 
     if (A_ERR_NONE == error)
     {
-        error = a_AddSocket(&aether_socket, session_.message_buffer_, sizeof(session_.message_buffer_), true);
+        error = a_AddSession(&aether_session, &aether_socket, session_.message_buffer_, sizeof(session_.message_buffer_), true);
 
         A_LOG_VERBOSE(kLogTag, "Socket add error: %s", a_Err_ToString(error));
     }
