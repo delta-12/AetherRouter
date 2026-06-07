@@ -93,7 +93,7 @@ int main(const int argc, const char *const argv[])
 
         a_Task();
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::microseconds(250));
     }
 
     a_Deinitialize();
