@@ -13,17 +13,17 @@ using asio::ip::tcp;
 class Server
 {
     public:
-        Server(const std::uint16_t port);
+        Server(asio::io_context &io_context, const std::uint16_t port);
         Server(const Server &server)            = delete;
         Server(Server &&server)                 = delete;
         Server &operator=(const Server &server) = delete;
         Server &operator=(Server &&server)      = delete;
-        void Run(void);
 
     private:
+        void Run(void);
         void AcceptSession(tcp::socket socket);
 
-        asio::io_context io_;
+        asio::io_context &io_context_;
         tcp::acceptor acceptor_;
 };
 

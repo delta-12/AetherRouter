@@ -15,7 +15,7 @@ const char *kLogTag = "SERIAL";
 static std::size_t SessionSend(const std::uint8_t *const data, const std::size_t size, void *arg);
 static std::size_t SessionReceive(std::uint8_t *const data, const std::size_t size, void *arg);
 
-Port::Port(const std::string &device, const uint32_t baud_rate) : serial_port_(io_, device)
+Port::Port(asio::io_context &io_context, const std::string &device, const uint32_t baud_rate) : io_context_(io_context), serial_port_(io_context_, device)
 {
     serial_port_.set_option(asio::serial_port_base::baud_rate(baud_rate));
     serial_port_.set_option(asio::serial_port_base::character_size(8));
@@ -83,11 +83,6 @@ std::size_t Port::Write(const std::uint8_t *const buffer, const std::size_t size
     }
 
     return size;
-}
-
-void Port::Run(void)
-{
-    io_.poll();
 }
 
 void Port::AsyncRead(void)

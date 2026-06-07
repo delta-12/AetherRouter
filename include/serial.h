@@ -20,7 +20,7 @@ namespace aether_router::serial
 class Port
 {
     public:
-        Port(const std::string& device, const uint32_t baud_rate);
+        Port(asio::io_context &io_context, const std::string& device, const uint32_t baud_rate);
         Port(Port &port)                  = delete;
         Port(Port &&port)                 = delete;
         Port &operator=(const Port &port) = delete;
@@ -28,13 +28,12 @@ class Port
         ~Port();
         std::size_t Read(std::uint8_t *const buffer, const std::size_t size);
         std::size_t Write(const std::uint8_t *const buffer, const std::size_t size);
-        void Run(void);
 
     private:
         void AsyncRead(void);
         void AsyncWrite(void);
 
-        asio::io_context io_;
+        asio::io_context &io_context_;
         asio::serial_port serial_port_;
         session::Session<void *> session_;
         std::array<std::uint8_t, AETHER_TRANSPORT_MTU> read_buffer_;

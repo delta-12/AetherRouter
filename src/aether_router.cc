@@ -2,12 +2,14 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <thread>
 #include <vector>
 
 #include "aether.h"
+#include "asio.hpp"
 #include "toml++/toml.hpp"
 
 #include "serial.h"
@@ -54,13 +56,29 @@ int main(const int argc, const char *const argv[])
         return EXIT_FAILURE;
     }
 
+    asio::io_context          io_context;
+    asio::steady_timer        timer(io_context);
+    std::function<void(void)> run_task = [&](void)
+    {
+        timer.expires_after(std::chrono::microseconds(500));
+        timer.async_wait([&](const asio::error_code &error)
+        {
+            if (!error)
+            {
+                a_Task();
+                run_task();
+            }
+        });
+    };
+    run_task();
+
     std::vector<std::unique_ptr<aether_router::tcp::Server>> tcp_servers;
     const auto *const                                        tcp_ports = config["tcp"]["ports"].as_array();
     if (nullptr != tcp_ports)
     {
         for (auto &&tcp_port : *tcp_ports)
         {
-            tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(static_cast<std::uint16_t>(tcp_port.as_integer()->get())));
+            tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(io_context, static_cast<std::uint16_t>(tcp_port.as_integer()->get())));
         }
     }
 
@@ -74,6 +92,7 @@ int main(const int argc, const char *const argv[])
 
             serial_ports.emplace_back(
                 std::make_unique<aether_router::serial::Port>(
+                    io_context,
                     table->get_as<std::string>("device")->get(),
                     static_cast<std::uint32_t>(table->get_as<int64_t>("baudrate")->get())));
         }
@@ -81,19 +100,7 @@ int main(const int argc, const char *const argv[])
 
     while (AetherRouter_Running)
     {
-        for (std::unique_ptr<aether_router::tcp::Server> &tcp_server : tcp_servers)
-        {
-            tcp_server->Run();
-        }
-
-        for (std::unique_ptr<aether_router::serial::Port> &serial_port : serial_ports)
-        {
-            serial_port->Run();
-        }
-
-        a_Task();
-
-        std::this_thread::sleep_for(std::chrono::microseconds(250));
+        io_context.run_one_for(std::chrono::milliseconds(10));
     }
 
     a_Deinitialize();

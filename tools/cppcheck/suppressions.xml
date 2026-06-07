@@ -15,4 +15,10 @@
         <fileName>*/src/aether_router.cc</fileName>
     </suppress>
 
+    <!-- Suppress reducing the scope tcp_servers and serial_ports -->
+    <suppress>
+        <id>variableScope</id>
+        <fileName>*/src/aether_router.cc</fileName>
+    </suppress>
+
 </suppressions>

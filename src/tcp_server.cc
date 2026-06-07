@@ -23,30 +23,33 @@ static a_Err_t SessionStop(void *arg);
 static std::size_t SessionSend(const std::uint8_t *const data, const std::size_t size, void *arg);
 static std::size_t SessionReceive(std::uint8_t *const data, const std::size_t size, void *arg);
 
-Server::Server(const std::uint16_t port) : acceptor_(io_, tcp::endpoint(tcp::v4(), port))
+Server::Server(asio::io_context &io_context, const std::uint16_t port) : io_context_(io_context), acceptor_(io_context_, tcp::endpoint(tcp::v4(), port))
 {
     acceptor_.set_option(tcp::acceptor::reuse_address(true));
-    acceptor_.non_blocking(true);
 
     A_LOG_DEBUG(kLogTag, "Listening on port %u", port);
+
+    Run();
 }
 
 void Server::Run(void)
 {
     asio::error_code error;
-    tcp::socket      socket(io_);
+    tcp::socket      socket(io_context_);
 
-    acceptor_.accept(socket, error);
+    acceptor_.async_accept([this](const asio::error_code &error, tcp::socket socket)
+    {
+        if (error)
+        {
+            A_LOG_ERROR(kLogTag, "Accept session error: %s", error.message().c_str());
+        }
+        else
+        {
+            AcceptSession(std::move(socket));
+        }
 
-    if (!error)
-    {
-        AcceptSession(std::move(socket));
-    }
-    else if ((asio::error::would_block != error) && (asio::error::try_again != error))
-    {
-        // TODO handle error
-        A_LOG_ERROR(kLogTag, "Accept session error: %s", error.message().c_str());
-    }
+        Run();
+    });
 }
 
 void Server::AcceptSession(tcp::socket socket)
