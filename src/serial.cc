@@ -45,7 +45,7 @@ Port::Port(asio::io_context &io_context, const std::string &device, const uint32
     {
         error = a_AddSession(&aether_session, &aether_socket, session_.message_buffer_, sizeof(session_.message_buffer_), true);
 
-        A_LOG_VERBOSE(kLogTag, "Socket add error: %s", a_Err_ToString(error));
+        A_LOG_VERBOSE(kLogTag, "Session add error: %s", a_Err_ToString(error));
     }
 }
 

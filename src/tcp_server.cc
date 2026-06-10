@@ -79,7 +79,7 @@ void Server::AcceptSession(tcp::socket socket)
     {
         error = a_AddSession(&aether_session, &aether_socket, session->message_buffer_, sizeof(session->message_buffer_), false);
 
-        A_LOG_VERBOSE(kLogTag, "Socket add error: %s", a_Err_ToString(error));
+        A_LOG_VERBOSE(kLogTag, "Session add error: %s", a_Err_ToString(error));
     }
 
     if (A_ERR_NONE == error)
@@ -111,9 +111,9 @@ static std::size_t SessionSend(const std::uint8_t *const data, const std::size_t
     if (error)
     {
         sent = SIZE_MAX;
-    }
 
-    A_LOG_VERBOSE(kLogTag, "Session send error: %s", error.message().c_str());
+        A_LOG_VERBOSE(kLogTag, "Session send error: %s", error.message().c_str());
+    }
 
     return sent;
 }
@@ -132,9 +132,9 @@ static std::size_t SessionReceive(std::uint8_t *const data, const std::size_t si
     else if (error)
     {
         received = SIZE_MAX;
-    }
 
-    A_LOG_VERBOSE(kLogTag, "Session receive error: %s", error.message().c_str());
+        A_LOG_VERBOSE(kLogTag, "Session receive error: %s", error.message().c_str());
+    }
 
     return received;
 }
