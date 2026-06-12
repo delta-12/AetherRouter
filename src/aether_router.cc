@@ -5,6 +5,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -17,6 +18,17 @@
 #include "version.h"
 
 std::atomic<bool> AetherRouter_Running(true);
+
+class AetherGuard
+{
+    public:
+        AetherGuard(void);
+        AetherGuard(const AetherGuard &aether_guard)            = delete;
+        AetherGuard(AetherGuard &&aether_guard)                 = delete;
+        AetherGuard &operator=(const AetherGuard &aether_guard) = delete;
+        AetherGuard &operator=(AetherGuard &&aether_guard)      = delete;
+        ~AetherGuard();
+};
 
 void AetherRouter_SignalHandler(const int signal);
 
@@ -41,70 +53,77 @@ int main(const int argc, const char *const argv[])
     try
     {
         config = toml::parse_file(argv[1U]);
+
+        a_SetLogLevel(config["aether"]["log_level"].value_or(A_LOG_LEVEL_INFO));
+        AetherGuard aether;
+
+        asio::io_context          io_context;
+        asio::steady_timer        timer(io_context);
+        std::function<void(void)> run_task = [&](void)
+        {
+            timer.expires_after(std::chrono::microseconds(500));
+            timer.async_wait([&](const asio::error_code &error)
+            {
+                if (!error)
+                {
+                    a_Task();
+                    run_task();
+                }
+            });
+        };
+        run_task();
+
+        std::vector<std::unique_ptr<aether_router::tcp::Server>> tcp_servers;
+        const auto *const                                        tcp_ports = config["tcp"]["ports"].as_array();
+        if (nullptr != tcp_ports)
+        {
+            for (auto &&tcp_port : *tcp_ports)
+            {
+                tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(io_context, static_cast<std::uint16_t>(tcp_port.as_integer()->get())));
+            }
+        }
+
+        std::vector<std::unique_ptr<aether_router::serial::Port>> serial_ports;
+        const auto *const                                         serial_port_configs = config["serial"].as_array();
+        if (nullptr != serial_port_configs)
+        {
+            for (auto &&serial_port_config : *serial_port_configs)
+            {
+                const auto table = serial_port_config.as_table();
+
+                serial_ports.emplace_back(
+                    std::make_unique<aether_router::serial::Port>(
+                        table->get_as<std::string>("device")->get(),
+                        static_cast<std::uint32_t>(table->get_as<int64_t>("baudrate")->get())));
+            }
+        }
+
+        while (AetherRouter_Running)
+        {
+            io_context.run_one_for(std::chrono::milliseconds(10));
+        }
     }
     catch (const std::exception &exception)
     {
-        std::cerr << "Error parsing config file: " << exception.what() << "\n";
+        std::cerr << "Fatal error: " << exception.what() << "\n";
         return EXIT_FAILURE;
     }
 
-    a_SetLogLevel(config["aether"]["log_level"].value_or(A_LOG_LEVEL_INFO));
-    a_Err_t error = a_Initialize(A_TRANSPORT_PEER_ID_MAX);
+    return EXIT_SUCCESS;
+}
+
+AetherGuard::AetherGuard(void)
+{
+    const a_Err_t error = a_Initialize(A_TRANSPORT_PEER_ID_MAX);
     if (A_ERR_NONE != error)
     {
-        std::cerr << "Error initializing aether: " << a_Err_ToString(error) << "\n";
-        return EXIT_FAILURE;
+        throw std::runtime_error(std::string("Failed to initialize aether: ") + a_Err_ToString(error));
     }
+}
 
-    asio::io_context          io_context;
-    asio::steady_timer        timer(io_context);
-    std::function<void(void)> run_task = [&](void)
-    {
-        timer.expires_after(std::chrono::microseconds(500));
-        timer.async_wait([&](const asio::error_code &error)
-        {
-            if (!error)
-            {
-                a_Task();
-                run_task();
-            }
-        });
-    };
-    run_task();
-
-    std::vector<std::unique_ptr<aether_router::tcp::Server>> tcp_servers;
-    const auto *const                                        tcp_ports = config["tcp"]["ports"].as_array();
-    if (nullptr != tcp_ports)
-    {
-        for (auto &&tcp_port : *tcp_ports)
-        {
-            tcp_servers.emplace_back(std::make_unique<aether_router::tcp::Server>(io_context, static_cast<std::uint16_t>(tcp_port.as_integer()->get())));
-        }
-    }
-
-    std::vector<std::unique_ptr<aether_router::serial::Port>> serial_ports;
-    const auto *const                                         serial_port_configs = config["serial"].as_array();
-    if (nullptr != serial_port_configs)
-    {
-        for (auto &&serial_port_config : *serial_port_configs)
-        {
-            const auto table = serial_port_config.as_table();
-
-            serial_ports.emplace_back(
-                std::make_unique<aether_router::serial::Port>(
-                    io_context,
-                    table->get_as<std::string>("device")->get(),
-                    static_cast<std::uint32_t>(table->get_as<int64_t>("baudrate")->get())));
-        }
-    }
-
-    while (AetherRouter_Running)
-    {
-        io_context.run_one_for(std::chrono::milliseconds(10));
-    }
-
+AetherGuard::~AetherGuard()
+{
     a_Deinitialize();
-    return EXIT_SUCCESS;
 }
 
 void AetherRouter_SignalHandler(const int signal)

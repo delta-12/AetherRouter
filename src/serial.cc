@@ -1,49 +1,105 @@
 #include "serial.h"
 
-#include <algorithm>
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <system_error>
 
 #include "aether.h"
-#include "asio.hpp"
 
 namespace aether_router::serial
 {
 
 const char *kLogTag = "SERIAL";
 
+static speed_t BaudRateToSpeed(const std::uint32_t baud_rate);
+static a_Err_t SessionStop(void *arg);
 static std::size_t SessionSend(const std::uint8_t *const data, const std::size_t size, void *arg);
 static std::size_t SessionReceive(std::uint8_t *const data, const std::size_t size, void *arg);
 
-Port::Port(asio::io_context &io_context, const std::string &device, const uint32_t baud_rate) : io_context_(io_context), serial_port_(io_context_, device)
+Port::Port(const std::string &device, const std::uint32_t baud_rate) : device_(device)
 {
-    serial_port_.set_option(asio::serial_port_base::baud_rate(baud_rate));
-    serial_port_.set_option(asio::serial_port_base::character_size(8));
-    serial_port_.set_option(asio::serial_port_base::parity(asio::serial_port_base::parity::none));
-    serial_port_.set_option(asio::serial_port_base::stop_bits(asio::serial_port_base::stop_bits::one));
-    serial_port_.set_option(asio::serial_port_base::flow_control(asio::serial_port_base::flow_control::none));
+    struct termios tty;
 
-    AsyncRead();
+    session_.socket = open(device_.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
 
-    A_LOG_DEBUG(kLogTag, "Listening on device %s with baudrate %u", device.c_str(), baud_rate);
+    if (session_.socket < 0)
+    {
+        throw std::system_error(errno, std::generic_category(), "Failed to open device " + device_);
+    }
 
-    a_SocketFunctions_t aether_socket_functions = {.start = nullptr, .stop = nullptr, .send = SessionSend, .receive = SessionReceive, .arg = this};
-    a_Socket_t          aether_socket;
-    a_Session_t         aether_session;
+    if (0 != tcgetattr(session_.socket, &tty))
+    {
+        close(session_.socket);
+        throw std::system_error(errno, std::generic_category(), "Failed to get attributes for device " + device_);
+    }
+
+    cfmakeraw(&tty);
+
+    // 8-bit character size
+    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag |= CS8;
+
+    // No parity
+    tty.c_cflag &= ~PARENB;
+    tty.c_iflag &= ~INPCK;
+
+    // One stop bit
+    tty.c_cflag &= ~CSTOPB;
+
+    // Disable both hardware and software flow control
+    tty.c_cflag &= ~CRTSCTS;
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+
+    // Ignores modem control lines
+    tty.c_cflag |= (CREAD | CLOCAL);
+
+    // Read returns immediately with however many bytes are in the buffer
+    // Consistent with O_NONBLOCK
+    tty.c_cc[VMIN]  = 0;
+    tty.c_cc[VTIME] = 0;
+
+    const speed_t speed = BaudRateToSpeed(baud_rate);
+    if (B0 == speed)
+    {
+        close(session_.socket);
+        throw std::invalid_argument("Unsupported baud rate " + std::to_string(baud_rate));
+    }
+    cfsetispeed(&tty, speed);
+    cfsetospeed(&tty, speed);
+
+    if (0 != tcsetattr(session_.socket, TCSANOW, &tty))
+    {
+        close(session_.socket);
+        throw std::system_error(errno, std::generic_category(), "Failed to get attributes for device " + device_);
+    }
+
+    Reset();
+
+    A_LOG_DEBUG(kLogTag, "Listening on device %s with baudrate %u", device_.c_str(), baud_rate);
+
+    const a_SocketFunctions_t aether_socket_functions = {.start = nullptr, .stop = SessionStop, .send = SessionSend, .receive = SessionReceive, .arg = this};
+    a_Socket_t                aether_socket;
+    a_Session_t               aether_session;
 
     a_Err_t error = a_InitializeSocket(&aether_socket,
                                        A_SOCKET_TYPE_SERIAL,
                                        aether_socket_functions,
-                                       session_.send_buffer_,
-                                       sizeof(session_.send_buffer_),
-                                       session_.receive_buffer_,
-                                       sizeof(session_.receive_buffer_));
+                                       session_.send_buffer,
+                                       sizeof(session_.send_buffer),
+                                       session_.receive_buffer,
+                                       sizeof(session_.receive_buffer));
 
     A_LOG_VERBOSE(kLogTag, "Socket initialization error: %s", a_Err_ToString(error));
 
     if (A_ERR_NONE == error)
     {
-        error = a_AddSession(&aether_session, &aether_socket, session_.message_buffer_, sizeof(session_.message_buffer_), true);
+        error = a_AddSession(&aether_session, &aether_socket, session_.message_buffer, sizeof(session_.message_buffer), true);
 
         A_LOG_VERBOSE(kLogTag, "Session add error: %s", a_Err_ToString(error));
     }
@@ -51,95 +107,117 @@ Port::Port(asio::io_context &io_context, const std::string &device, const uint32
 
 Port::~Port()
 {
-    if (serial_port_.is_open())
+    if (session_.socket >= 0)
     {
-        serial_port_.cancel();
-        serial_port_.close();
+        Reset();
+        close(session_.socket);
+
+        session_.socket = -1;
+
+        A_LOG_DEBUG(kLogTag, "Closed device %s", device_.c_str());
     }
+}
+
+void Port::Reset(void)
+{
+    (void)tcdrain(session_.socket);
+    (void)tcflush(session_.socket, TCIOFLUSH);
+
+    A_LOG_VERBOSE(kLogTag, "Reset device %s", device_.c_str());
 }
 
 std::size_t Port::Read(std::uint8_t *const buffer, const std::size_t size)
 {
-    std::size_t read_size = size;
+    const ssize_t bytes_read = read(session_.socket, buffer, size);
+    std::size_t   bytes      = SIZE_MAX;
 
-    if (read_size > read_queue_.size())
+    if (bytes_read >= 0)
     {
-        read_size = read_queue_.size();
+        bytes = static_cast<std::size_t>(bytes_read);
+    }
+    else if ((EAGAIN == errno) || (EWOULDBLOCK == errno))
+    {
+        bytes = 0U;
     }
 
-    (void)std::copy(read_queue_.begin(), read_queue_.begin() + read_size, buffer);
-    (void)read_queue_.erase(read_queue_.begin(), read_queue_.begin() + read_size);
-
-    return read_size;
+    return bytes;
 }
 
 std::size_t Port::Write(const std::uint8_t *const buffer, const std::size_t size)
 {
-    (void)write_queue_.insert(write_queue_.end(), buffer, buffer + size);
+    const ssize_t bytes_written = write(session_.socket, buffer, size);
+    std::size_t   bytes         = SIZE_MAX;
 
-    if (!writing_)
+    if (bytes_written >= 0)
     {
-        AsyncWrite();
+        bytes = static_cast<std::size_t>(bytes_written);
     }
 
-    return size;
+    return bytes;
 }
 
-void Port::AsyncRead(void)
+static speed_t BaudRateToSpeed(const std::uint32_t baud_rate)
 {
-    (void)serial_port_.async_read_some(
-        asio::buffer(read_buffer_),
-        [this](const asio::error_code &error, const std::size_t size)
+    speed_t speed = B0;
+
+    switch (baud_rate)
     {
-        if (asio::error::operation_aborted == error)
-        {
-            // Async operation was cancelled on purpose
-        }
-        else if (error)
-        {
-            A_LOG_ERROR(kLogTag, "Failed to read data with error %s", error.message().c_str());
-        }
-        else
-        {
-            read_queue_.insert(read_queue_.end(), read_buffer_.begin(), read_buffer_.begin() + size);
-            AsyncRead();
-        }
-    });
-}
-
-void Port::AsyncWrite(void)
-{
-    if (!write_queue_.empty() && !writing_)
-    {
-        writing_ = true;
-
-        write_buffer_.assign(write_queue_.begin(), write_queue_.end());
-        write_queue_.clear();
-
-        asio::async_write(serial_port_,
-                          asio::buffer(write_buffer_),
-                          [this](const asio::error_code &error, const std::size_t size)
-        {
-            A_UNUSED(size);
-
-            if (asio::error::operation_aborted == error)
-            {
-                // Async operation was cancelled on purpose
-            }
-            else if (error)
-            {
-                A_LOG_ERROR(kLogTag, "Failed to write data with error %s", error.message().c_str());
-            }
-            else if (!write_queue_.empty())
-            {
-                AsyncWrite();
-            }
-            else
-            {
-                writing_ = false;
-            }
-        });
+    case 9600:
+        speed = B9600;
+        break;
+    case 19200:
+        speed = B19200;
+        break;
+    case 38400:
+        speed = B38400;
+        break;
+    case 57600:
+        speed = B57600;
+        break;
+    case 115200:
+        speed = B115200;
+        break;
+    case 230400:
+        speed = B230400;
+        break;
+    case 460800:
+        speed = B460800;
+        break;
+    case 500000:
+        speed = B500000;
+        break;
+    case 576000:
+        speed = B576000;
+        break;
+    case 921600:
+        speed = B921600;
+        break;
+    case 1000000:
+        speed = B1000000;
+        break;
+    case 1152000:
+        speed = B1152000;
+        break;
+    case 1500000:
+        speed = B1500000;
+        break;
+    case 2000000:
+        speed = B2000000;
+        break;
+    default:
+        break;
     }
+
+    return speed;
+}
+
+static a_Err_t SessionStop(void *arg)
+{
+    Port *const port = static_cast<Port *>(arg);
+
+    port->Reset();
+
+    return A_ERR_NONE;
 }
 
 static std::size_t SessionSend(const std::uint8_t *const data, const std::size_t size, void *arg)

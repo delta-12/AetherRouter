@@ -68,16 +68,16 @@ void Server::AcceptSession(tcp::socket socket)
     a_Err_t error = a_InitializeSocket(&aether_socket,
                                        A_SOCKET_TYPE_TCP,
                                        socket_functions,
-                                       session->send_buffer_,
-                                       sizeof(session->send_buffer_),
-                                       session->receive_buffer_,
-                                       sizeof(session->receive_buffer_));
+                                       session->send_buffer,
+                                       sizeof(session->send_buffer),
+                                       session->receive_buffer,
+                                       sizeof(session->receive_buffer));
 
     A_LOG_VERBOSE(kLogTag, "Socket initialization error: %s", a_Err_ToString(error));
 
     if (A_ERR_NONE == error)
     {
-        error = a_AddSession(&aether_session, &aether_socket, session->message_buffer_, sizeof(session->message_buffer_), false);
+        error = a_AddSession(&aether_session, &aether_socket, session->message_buffer, sizeof(session->message_buffer), false);
 
         A_LOG_VERBOSE(kLogTag, "Session add error: %s", a_Err_ToString(error));
     }
@@ -106,7 +106,7 @@ static std::size_t SessionSend(const std::uint8_t *const data, const std::size_t
     Session *const   session = static_cast<Session *>(arg);
     asio::error_code error;
 
-    std::size_t sent = asio::write(session->socket_, asio::buffer(data, size), error);
+    std::size_t sent = asio::write(session->socket, asio::buffer(data, size), error);
 
     if (error)
     {
@@ -123,7 +123,7 @@ static std::size_t SessionReceive(std::uint8_t *const data, const std::size_t si
     Session *const   session = static_cast<Session *>(arg);
     asio::error_code error;
 
-    std::size_t received = session->socket_.read_some(asio::buffer(data, size), error);
+    std::size_t received = session->socket.read_some(asio::buffer(data, size), error);
 
     if ((asio::error::would_block == error) || (asio::error::try_again == error))
     {
